@@ -1,14 +1,20 @@
 /* ===== On-Chain-Recherche: Token, Wallet, Kauf-Analyse (statisch, ohne API-Keys) ===== */
 const EP={pn:"https://solana-rpc.publicnode.com",mb:"https://api.mainnet-beta.solana.com",tt:"https://solana-mainnet.gateway.tatum.io"};
+const HKEY=()=>{try{return localStorage.getItem("helius_key")||""}catch(e){return""}};
+Object.defineProperty(EP,"he",{get:()=>"https://mainnet.helius-rpc.com/?api-key="+encodeURIComponent(HKEY())});
+let publicFailed=false;function noteFail(){if(HKEY())return;publicFailed=true;const h=document.getElementById("keyHint");if(h)h.hidden=false}
+const CAP=()=>HKEY()?{early:120,cand:40,pages:30,fpages:5,buyers:30,holders:15}:{early:40,cand:20,pages:8,fpages:2,buyers:12,holders:8};
+async function heAsc(addr,limit=100,extra=""){if(!HKEY())return null;await throttle("he");const r=await fetch(`https://api.helius.xyz/v0/addresses/${addr}/transactions?api-key=${encodeURIComponent(HKEY())}&sort-order=asc&limit=${limit}${extra}`);if(!r.ok)throw new Error("Helius HTTP "+r.status);return r.json()}
+async function heAsset(id){if(!HKEY())return null;try{return await sol("getAsset",{id},true,["he"])}catch(e){return null}}
 const ROUTE={getTokenLargestAccounts:["tt","mb"],getTokenAccountsByOwner:["mb","pn"]};
-const GAP={pn:120,mb:280,tt:450};const lastCall={};const rcache=new Map();
+const GAP={pn:120,mb:280,tt:450,he:40};const lastCall={};const rcache=new Map();
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const SYS="11111111111111111111111111111111";
 const KNOWN_POOL=new Set(["5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1","GpMZbSM2GgvTKHJirzeGfMFoaZ8UR2X7F4v8vHTvxFbL","WLHv2UAZm6z4KyaaELi5pjdbJh6RESMva1Rnn8pJVVh","39azUYFWPz3VHgKCf3VChUwbpURdCHRxjWVowf5jUJjg"]);
 async function throttle(e){for(;;){const n=Date.now(),t=(lastCall[e]||0)+GAP[e];if(n>=t){lastCall[e]=n;return}await sleep(t-n)}}
 function sol(method,params,useCache=true,eps){const key=(eps||"")+method+JSON.stringify(params);if(useCache&&rcache.has(key))return rcache.get(key);
-const p=(async()=>{let err;for(const e of (eps||ROUTE[method]||["pn","mb","tt"])){for(let a=0;a<3;a++){await throttle(e);try{const r=await fetch(EP[e],{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({jsonrpc:"2.0",id:1,method,params})});
-if(r.status===429){await sleep(700*(a+1));continue}const j=await r.json();if(j.error){if(/429|too many/i.test(j.error.code+" "+j.error.message)){await sleep(700*(a+1));continue}throw new Error(j.error.message)}return j.result}catch(x){err=x;if(x instanceof TypeError&&a<2){await sleep(900*(a+1));continue}break}}}throw err||new Error("RPC-Limit erreicht")})();
+const p=(async()=>{let err;for(const e of (eps||(HKEY()?["he",...(ROUTE[method]||["pn","mb","tt"])]:(ROUTE[method]||["pn","mb","tt"])))){for(let a=0;a<3;a++){await throttle(e);try{const r=await fetch(EP[e],{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({jsonrpc:"2.0",id:1,method,params})});
+if(r.status===429){await sleep(700*(a+1));continue}const j=await r.json();if(j.error){if(/429|too many/i.test(j.error.code+" "+j.error.message)){await sleep(700*(a+1));continue}throw new Error(j.error.message)}return j.result}catch(x){err=x;if(x instanceof TypeError&&a<2){await sleep(900*(a+1));continue}break}}}noteFail();throw err||new Error("RPC-Limit erreicht")})();
 if(useCache){rcache.set(key,p);p.catch(()=>rcache.delete(key))}return p}
 const getTx=async s=>{for(let a=0;a<3;a++){try{return await getTx0(s)}catch(e){if(a==2)throw e;rcache.delete('getTransaction'+JSON.stringify([s,{maxSupportedTransactionVersion:1,encoding:'jsonParsed',commitment:'confirmed'}]));await sleep(1500)}}};
 const getTx0=async s=>{const P=[s,{maxSupportedTransactionVersion:1,encoding:"jsonParsed",commitment:"confirmed"}];return (await sol("getTransaction",P))||(await sol("getTransaction",P,true,["mb"]))};
@@ -30,9 +36,9 @@ function tokDeltas(tx,mint){const m=tx.meta||{},o={};const add=(b,s)=>{if(b.mint
 function solIncoming(tx,w){for(const i of allIx(tx)){const p=i.parsed;if(i.program==="system"&&p&&p.info){const d=p.info.destination||p.info.newAccount,s=p.info.source;if(d===w&&s&&s!==w&&p.info.lamports>0)return{from:s,lamports:p.info.lamports}}}
 const k=keysOf(tx),ix=k.indexOf(w),m=tx.meta;if(ix>0&&m&&m.postBalances[ix]>m.preBalances[ix])return{from:k[0],lamports:m.postBalances[ix]-m.preBalances[ix],guess:1};return null}
 async function sigsBack(addr,maxPages,opts={}){let all=[],before=opts.before,complete=false,eps;for(let p=0;p<maxPages;p++){const q=[addr,{limit:1000,...(before?{before}:{}),...(opts.until?{until:opts.until}:{})}];let r=await sol("getSignaturesForAddress",q,true,eps);
-if(r.length<1000&&!eps){/* publicnode hat begrenzte Historie -> mit mainnet-beta weiter prüfen */try{const before2=r.length?r[r.length-1].signature:before;const r2=await sol("getSignaturesForAddress",[addr,{limit:1000,...(before2?{before:before2}:{}),...(opts.until?{until:opts.until}:{})}],true,["mb"]);all=all.concat(r);eps=["mb"];r=r2;if(r.length){before=r[r.length-1].signature}}catch(e){all=all.concat(r);return{sigs:all,complete:false,truncated:true}}}
+if(r.length<1000&&!eps&&!HKEY()){/* publicnode hat begrenzte Historie -> mit mainnet-beta weiter prüfen */try{const before2=r.length?r[r.length-1].signature:before;const r2=await sol("getSignaturesForAddress",[addr,{limit:1000,...(before2?{before:before2}:{}),...(opts.until?{until:opts.until}:{})}],true,["mb"]);all=all.concat(r);eps=["mb"];r=r2;if(r.length){before=r[r.length-1].signature}}catch(e){all=all.concat(r);return{sigs:all,complete:false,truncated:true}}}
 all=all.concat(r);if(r.length<1000){complete=true;break}before=r[r.length-1].signature;opts.prog&&opts.prog(all.length)}return{sigs:all,complete}}
-async function funding(w){try{const {sigs,complete}=await sigsBack(w,2);if(!sigs.length)return{none:1};const old=sigs.slice(-3).reverse();for(const s of old){const t=await getTx(s.signature);const f=t&&solIncoming(t,w);if(f)return{...f,time:t.blockTime,sig:s.signature,complete}}return{complete,unknown:1}}catch(e){return{err:e.message}}}
+async function funding(w){try{if(HKEY()){try{const h=await heAsc(w,25);for(const t of h||[]){const n=(t.nativeTransfers||[]).find(x=>x.toUserAccount===w&&x.fromUserAccount&&x.fromUserAccount!==w&&x.amount>0);if(n)return{from:n.fromUserAccount,lamports:n.amount,time:t.timestamp,sig:t.signature,complete:true}}}catch(e){}}const {sigs,complete}=await sigsBack(w,CAP().fpages);if(!sigs.length)return{none:1};const old=sigs.slice(-3).reverse();for(const s of old){const t=await getTx(s.signature);const f=t&&solIncoming(t,w);if(f)return{...f,time:t.blockTime,sig:s.signature,complete}}return{complete,unknown:1}}catch(e){return{err:e.message}}}
 async function isPoolOwners(owners,pairs){const res={};const list=[...new Set(owners)];for(let i=0;i<list.length;i+=100){const ch=list.slice(i,i+100);const r=await sol("getMultipleAccounts",[ch,{encoding:"base64",dataSlice:{offset:0,length:0}}]);r.value.forEach((a,j)=>{const o=ch[j];res[o]=pairs.has(o)||KNOWN_POOL.has(o)||(a&&a.owner!==SYS)})}return res}
 async function dex(addrs){const out={};for(let i=0;i<addrs.length;i+=30){try{const j=await jget("https://api.dexscreener.com/latest/dex/tokens/"+addrs.slice(i,i+30).join(","));(j.pairs||[]).sort((a,b)=>(b.liquidity?.usd||0)-(a.liquidity?.usd||0)).forEach(p=>{const k=p.baseToken.address;(out[k]=out[k]||[]).push(p)})}catch(e){}}return out}
 function progress(el){const box=document.createElement("div");box.className="prog";box.innerHTML=`<div class="bar"><i></i></div><span></span>`;el.prepend(box);return{set(t,f){box.querySelector("span").textContent=t;if(f!=null)box.querySelector("i").style.width=Math.round(f*100)+"%"},done(){box.remove()}}}
@@ -46,9 +52,10 @@ const [acc,dx]=await Promise.all([sol("getAccountInfo",[mint,{encoding:"jsonPars
 const info=acc&&acc.value&&acc.value.data&&acc.value.data.parsed;if(!info||info.type!=="mint")throw new Error("Das ist keine SPL-Token-Mint-Adresse.");
 const mi=info.info,dec=mi.decimals,supply=Number(mi.supply)/10**dec;const meta=(mi.extensions||[]).find(e=>e.extension==="tokenMetadata");
 const pairs=dx[mint]||[];const P=pairs[0];const pairSet=new Set(pairs.map(p=>p.pairAddress));
-const name=P?.baseToken.name||meta?.state.name||"Unbekannt",sym=P?.baseToken.symbol||meta?.state.symbol||"?";R.name=name;R.sym=sym;
+const asset=await heAsset(mint);const am=asset?.content?.metadata||{};const img=asset?.content?.links?.image;
+const name=P?.baseToken.name||am.name||meta?.state.name||"Unbekannt",sym=P?.baseToken.symbol||am.symbol||meta?.state.symbol||"?";R.name=name;R.sym=sym;
 const liq=pairs.reduce((a,p)=>a+(p.liquidity?.usd||0),0);
-sect(out,`${esc(name)} <span class="sym">($${esc(sym)})</span>`,`<div class="grid">
+sect(out,`${img&&/^https:/.test(img)?`<img class="tokimg" src="${esc(img)}" alt="">`:""}${esc(name)} <span class="sym">($${esc(sym)})</span>`,`<div class="grid">
 <div class="k">Mint</div><div class="v">${esc(mint)} <a class="ext" href="${XURL.SOL.t(mint)}" target="_blank" rel="noopener">Solscan ↗</a>${P?` <a class="ext" href="${P.url}" target="_blank" rel="noopener">DexScreener ↗</a>`:""}</div>
 <div class="k">Preis</div><div class="v">${usd(P?.priceUsd)} ${P?.priceChange?.h24!=null?`(24h: ${P.priceChange.h24}%)`:""}</div>
 <div class="k">Marktkap.</div><div class="v">${usd(P?.marketCap??P?.fdv)}</div>
@@ -71,11 +78,12 @@ if(holders.length){if(top10>50)R.flags.push([3,`Top-10-Holder (ohne Pools) halte
 R.holders=holders;R.top10=top10;
 // Erstellung
 pr.set("Suche Erstellungs-Transaktion (älteste Signatur) …",.25);
-const {sigs,complete,truncated}=await sigsBack(mint,8,{prog:n=>pr.set(`Suche Erstellung … ${n.toLocaleString("de-DE")} Signaturen durchsucht`,.25)});
+let hs=null;try{hs=await heAsc(mint,100)}catch(e){}
+const {sigs,complete,truncated}=hs&&hs.length?{sigs:hs.map(t=>({signature:t.signature,slot:t.slot,err:t.transactionError||null})).reverse(),complete:true}:await sigsBack(mint,CAP().pages,{prog:n=>pr.set(`Suche Erstellung … ${n.toLocaleString("de-DE")} Signaturen durchsucht`,.25)});
 let creator=null,cSlot=null,cTime=null,cSig=null,early=[];
 let cOk=false;if((complete||truncated)&&sigs.length){if(truncated)R.flags.push([0,"Die kostenlose RPC liefert nicht die komplette Historie (Fallback-RPC gesperrt/limitiert) – älteste verfügbare Tx wird verwendet, Creator & frühe Käufe evtl. ungenau."]);const chron=sigs.slice().reverse().filter(s=>!s.err);cSig=chron[0].signature;cSlot=chron[0].slot;
-const N=Math.min(40,chron.length);pr.set(`Analysiere die ersten ${N} Transaktionen …`,.35);
-const txs=await pool(chron.slice(0,N),3,s=>getTx(s.signature),(d,t)=>pr.set(`Analysiere frühe Transaktionen ${d}/${t} …`,.35+.3*d/t));
+const N=Math.min(CAP().early,chron.length);pr.set(`Analysiere die ersten ${N} Transaktionen …`,.35);
+const txs=await pool(chron.slice(0,N),HKEY()?8:3,s=>getTx(s.signature),(d,t)=>pr.set(`Analysiere frühe Transaktionen ${d}/${t} …`,.35+.3*d/t));
 let ct=txs[0];if(!ct)try{ct=await getTx(cSig)}catch(e){}if(ct){creator=keysOf(ct)[0];cTime=ct.blockTime;txs[0]=ct;cOk=(ct.meta.logMessages||[]).some(l=>/Instruction: (Create|InitializeMint)/.test(l))}
 txs.forEach((t,i)=>{if(!t)return;const d=tokDeltas(t,mint);for(const w in d)early.push({w,d:d[w],slot:t.slot,sig:chron[i].signature,time:t.blockTime,payer:keysOf(t)[0]})})}
 else R.flags.push([0,`Token hat mehr als ${sigs.length.toLocaleString("de-DE")} Transaktionen – Erstellung & frühe Käufe wurden aus Limit-Gründen nicht vollständig analysiert.`]);
@@ -90,8 +98,8 @@ buyers.forEach(b=>{if(b.w===creator)return;if(b.slot===cSlot)sus(b.w,"Kauf im se
 const bundleSlot=buyers.filter(b=>b.w!==creator&&b.slot===cSlot);if(bundleSlot.length)R.flags.push([3,`Bundle: ${bundleSlot.length} Wallet(s) kauften im Erstellungs-Slot.`]);
 const crowded=Object.entries(bySlot).filter(([s,l])=>l.length>=3&&+s!==cSlot);if(crowded.length)R.flags.push([2,`${crowded.length} Slot(s) mit ≥3 gleichzeitigen frühen Käufern.`]);
 // Funding-Cluster
-const cand=[...new Set([creator,...buyers.slice(0,12).map(b=>b.w),...realH.slice(0,8).map(h=>h.owner)].filter(w=>w&&w!=="?"))].slice(0,20);
-const fund={};await pool(cand,2,async w=>{fund[w]=await funding(w)},(d,t)=>pr.set(`Prüfe Finanzierungsquellen ${d}/${t} …`,.65+.25*d/t));
+const cand=[...new Set([creator,...buyers.slice(0,CAP().buyers).map(b=>b.w),...realH.slice(0,CAP().holders).map(h=>h.owner)].filter(w=>w&&w!=="?"))].slice(0,CAP().cand);
+const fund={};await pool(cand,HKEY()?6:2,async w=>{fund[w]=await funding(w)},(d,t)=>pr.set(`Prüfe Finanzierungsquellen ${d}/${t} …`,.65+.25*d/t));
 const byF={};for(const w in fund){const f=fund[w];if(f&&f.from)(byF[f.from]=byF[f.from]||[]).push(w)}
 for(const f in byF){const l=byF[f];if(f===creator)l.forEach(w=>w!==creator&&sus(w,"Vom Creator mit SOL finanziert"));if(l.length>=2)l.forEach(w=>sus(w,`Cluster: ${l.length} Wallets von derselben Quelle ${sh(f)} finanziert`));if(cand.includes(f)&&f!==creator)l.forEach(w=>sus(w,`Finanziert von anderer verdächtiger/früher Wallet ${sh(f)}`))}
 const clusters=Object.entries(byF).filter(([f,l])=>l.length>=2);if(clusters.length)R.flags.push([2,`${clusters.length} Funding-Cluster (mehrere frühe Käufer/Holder von gleicher Quelle finanziert).`]);
@@ -127,7 +135,7 @@ async function walletView(a,out){out.innerHTML="";const c=chainOf(a);if(!c){sect
 try{const head=(bal,extra="")=>sect(out,`Wallet <span class="sym">${c}</span>`,`<div class="grid"><div class="k">Adresse</div><div class="v">${esc(a)} <a class="ext" href="${XURL[c].a(a)}" target="_blank" rel="noopener">Explorer ↗</a></div><div class="k">Guthaben</div><div class="v">${bal}</div>${extra}</div><button class="btn small" id="watchBtn">${isWatched(a)?"✓ Wird beobachtet":"👁 Wallet beobachten"}</button>`,"w-head");
 if(c==="SOL"){pr.set("Lade Guthaben …",.1);const b=await sol("getBalance",[a]);head(num(b.value/1e9)+" SOL");
 pr.set("Lade Token-Bestände …",.25);let toks=[];try{for(const pid of["TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA","TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"]){const r=await sol("getTokenAccountsByOwner",[a,{programId:pid},{encoding:"jsonParsed"}]);r.value.forEach(x=>{const i=x.account.data.parsed.info;const u=+i.tokenAmount.uiAmountString;if(u>0)toks.push({mint:i.mint,amt:u})})}}catch(e){toks.err=e.message}
-const px=await dex(toks.slice(0,60).map(t=>t.mint));toks.forEach(t=>{const p=px[t.mint]?.[0];t.sym=p?.baseToken.symbol;t.val=p?t.amt*p.priceUsd:null});toks.sort((x,y)=>(y.val||0)-(x.val||0));
+const px=await dex(toks.slice(0,60).map(t=>t.mint));if(HKEY())await pool(toks.filter(t=>!px[t.mint]).slice(0,30),6,async t=>{const a=await heAsset(t.mint);t.dsym=a?.content?.metadata?.symbol;t.dpx=a?.token_info?.price_info?.price_per_token});toks.forEach(t=>{const p=px[t.mint]?.[0];t.sym=p?.baseToken.symbol||t.dsym;t.val=p?t.amt*p.priceUsd:t.dpx?t.amt*t.dpx:null});toks.sort((x,y)=>(y.val||0)-(x.val||0));
 sect(out,`Token-Bestände (${toks.length})`,toks.err?`<p class="err">Token-Bestände gerade nicht abrufbar (öffentliche RPC limitiert/blockiert: ${esc(toks.err)}) – bitte später erneut versuchen.</p>`:toks.length?`<div class="tbl"><table><tr><th>Token</th><th>Menge</th><th>Wert</th><th></th></tr>${toks.slice(0,50).map(t=>`<tr><td>${esc(t.sym||sh(t.mint))}</td><td>${num(t.amt)}</td><td>${usd(t.val)}</td><td><a href="#" data-token="${t.mint}">Analysieren</a></td></tr>`).join("")}</table></div>`:"<p>Keine Token.</p>");
 pr.set("Lade Transaktionen …",.5);const s=await sol("getSignaturesForAddress",[a,{limit:20}],false);
 sect(out,"Letzte Transaktionen",`<div class="tbl"><table><tr><th>Zeit</th><th>Signatur</th><th>Status</th></tr>${s.map(x=>`<tr><td>${tme(x.blockTime)}</td><td>${tl(x.signature)}</td><td>${x.err?"❌ Fehler":"✅"}</td></tr>`).join("")}</table></div>`);
@@ -180,3 +188,12 @@ $("#walF").onsubmit=e=>{e.preventDefault();const v=$("#walIn").value.trim();if(B
 $("#buyF").onsubmit=e=>{e.preventDefault();const m=$("#buyTok").value.trim(),s=$("#buyTx").value.trim();if(!B58.test(m))return $("#buyOut").innerHTML=`<p class="err panel">Bitte eine gültige Solana-Token-Mint eingeben.</p>`;if(s&&!/^[1-9A-HJ-NP-Za-km-z]{80,90}$/.test(s))return $("#buyOut").innerHTML=`<p class="err panel">Ungültige Kauf-Signatur.</p>`;setTab("bought",{bought:m,buytx:s});boughtFlow(m,s||null,$("#buyOut"))};
 renderWatch();setInterval(()=>{if(getW().length&&!document.hidden)checkWatch()},60000);if(getW().length)checkWatch();
 {const p=new URLSearchParams(location.search);if(p.get("tx")){setTab("tx");$("#h").value=p.get("tx");$("#f").requestSubmit()}else if(p.get("token"))openToken(p.get("token"));else if(p.get("wallet"))openWallet(p.get("wallet"));else if(p.get("bought")){$("#buyTok").value=p.get("bought");$("#buyTx").value=p.get("buytx")||"";setTab("bought");$("#buyF").requestSubmit()}else if(p.get("tab"))setTab(p.get("tab"))}
+
+/* ---------- Einstellungen / Helius ---------- */
+function renderKeyState(){const k=HKEY();const b=$("#rpcBadge");b.textContent=k?"Helius aktiv":"Öffentliches RPC";b.className="badge2 "+(k?"on":"off");$("#keyStatus").textContent=k?"Gespeicherter Key: "+k.slice(0,4)+"…"+k.slice(-4):"Kein Key gespeichert.";const h=$("#keyHint");if(h&&k)h.hidden=true}
+$("#gear").onclick=()=>{$("#settings").hidden=!$("#settings").hidden};$("#setClose").onclick=()=>$("#settings").hidden=true;
+$("#keySave").onclick=async()=>{const k=$("#keyIn").value.trim();const m=$("#keyMsg");if(!/^[A-Za-z0-9-]{20,64}$/.test(k)){m.className="err";m.textContent="Ungültiges Key-Format.";return}m.className="";m.textContent="Prüfe Key …";
+try{const r=await fetch("https://mainnet.helius-rpc.com/?api-key="+encodeURIComponent(k),{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({jsonrpc:"2.0",id:1,method:"getSlot"})});const j=await r.json().catch(()=>({}));if(!r.ok||j.error||typeof j.result!=="number")throw new Error(j.error?.message||("HTTP "+r.status));
+localStorage.setItem("helius_key",k);rcache.clear();$("#keyIn").value="";m.className="ok";m.textContent="✅ Key gültig und gespeichert (Slot "+j.result.toLocaleString("de-DE")+").";renderKeyState()}catch(e){m.className="err";m.textContent="❌ Key konnte nicht verifiziert werden: "+e.message}};
+$("#keyDel").onclick=()=>{localStorage.removeItem("helius_key");rcache.clear();$("#keyMsg").className="";$("#keyMsg").textContent="Key gelöscht.";renderKeyState()};
+renderKeyState();

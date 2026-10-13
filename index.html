@@ -1,7 +1,13 @@
 <!DOCTYPE html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>OTC TX Tracker</title><link rel="stylesheet" href="style.css"></head><body>
 <canvas id="bg"></canvas>
-<header><h1 class="glow">OTC TX TRACKER</h1><button id="wallet" class="btn small">Wallet verbinden</button></header>
+<header><h1 class="glow">OTC TX TRACKER</h1><div class="hdr"><span id="rpcBadge" class="badge2 off">Öffentliches RPC</span><button id="gear" class="btn small" title="Einstellungen" aria-label="Einstellungen">⚙</button><button id="wallet" class="btn small">Wallet verbinden</button></div></header>
+<div id="settings" class="panel settings" hidden><h3 class="glow-s">Einstellungen</h3>
+<label for="keyIn">Helius API-Key (optional)</label><div class="row"><input id="keyIn" type="password" placeholder="Helius API-Key einfügen" autocomplete="off" spellcheck="false"><button id="keySave" class="btn small">Speichern</button><button id="keyDel" class="btn small">Löschen</button></div>
+<p id="keyStatus" class="muted"></p><p id="keyMsg"></p>
+<p class="muted">Der Key wird nur lokal in deinem Browser (localStorage) gespeichert und ausschließlich an Helius gesendet – nie an uns oder in die URL. Kostenlosen Key gibt es unter <a href="https://dashboard.helius.dev/" target="_blank" rel="noopener">dashboard.helius.dev</a>. Mit Key: vollständige Historie, genauere Creator-Erkennung, Token-Namen, Holdings und mehr analysierte Transaktionen.</p>
+<button id="setClose" class="btn small">Schließen</button></div>
+<p id="keyHint" class="keyhint" hidden>Öffentliches RPC war limitiert – für bessere Ergebnisse <a href="#" onclick="document.getElementById('settings').hidden=false;return false">Helius-Key eintragen</a>.</p>
 <nav class="tabs"><button data-tab="tx" class="on">Transaktion</button><button data-tab="token">Token-Analyse</button><button data-tab="wallet">Wallet</button><button data-tab="bought">Ich habe gekauft</button></nav>
 <main>
 <section id="tab-tx" class="tab">
