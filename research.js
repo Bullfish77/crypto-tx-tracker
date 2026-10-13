@@ -156,8 +156,37 @@ const WK="otc_watch";const getW=()=>{try{return JSON.parse(localStorage.getItem(
 const isWatched=a=>getW().some(w=>w.addr===a);
 async function latestId(a,c){if(c==="SOL")return(await sol("getSignaturesForAddress",[a,{limit:1}],false))[0]?.signature||"";if(c==="ETH")return(await jget(`https://eth.blockscout.com/api/v2/addresses/${a}/transactions`)).items?.[0]?.hash||"";return(await jget(`https://mempool.space/api/address/${a}/txs`))[0]?.txid||""}
 async function toggleWatch(a,c){let l=getW();if(l.some(w=>w.addr===a))l=l.filter(w=>w.addr!==a);else{let id="";try{id=await latestId(a,c)}catch(e){}l.push({addr:a,chain:c,seen:id,last:id,checked:Date.now()})}setW(l)}
-function renderWatch(){const l=getW(),el=$("#watchlist");if(!el)return;el.innerHTML=l.length?l.map(w=>`<div class="wrow ${w.last&&w.last!==w.seen?"new":""}"><span class="sym">${w.chain}</span> ${wl(w.addr,w.chain)} ${w.last&&w.last!==w.seen?`<b class="badge">NEUE TX</b> ${tl(w.last,w.chain)}`:""}<small>geprüft ${new Date(w.checked).toLocaleTimeString("de-DE")}</small> <a href="#" data-unwatch="${w.addr}">entfernen</a></div>`).join(""):"<p class='muted'>Noch keine Wallets beobachtet.</p>";const n=l.filter(w=>w.last!==w.seen).length;document.title=(n?`(${n}) `:"")+"OTC TX Tracker"}
-async function checkWatch(){const l=getW();for(const w of l){try{w.last=await latestId(w.addr,w.chain);w.checked=Date.now()}catch(e){}await sleep(500)}setW(l)}
+function renderWatch(){const l=getW(),el=$("#watchlist");if(!el)return;el.innerHTML=l.length?l.map(w=>`<div class="wrow ${w.last&&w.last!==w.seen?"new":""}"><span class="sym">${w.chain}</span>${w.label?`<b>${esc(w.label)}</b>`:""} ${wl(w.addr,w.chain)} ${w.last&&w.last!==w.seen?`<b class="badge">NEUE TX</b> ${tl(w.last,w.chain)}`:""}<small>geprüft ${new Date(w.checked).toLocaleTimeString("de-DE")}</small> <a href="#" data-label="${esc(w.addr)}">Label</a> <a href="#" data-unwatch="${esc(w.addr)}">entfernen</a></div>`).join(""):"<p class='muted'>Noch keine Wallets beobachtet.</p>";const n=l.filter(w=>w.last!==w.seen).length;document.title=(n?`(${n}) `:"")+"OTC TX Tracker"}
+document.addEventListener("click",e=>{const a=e.target.closest("a[data-label]");if(!a)return;e.preventDefault();e.stopPropagation();const l=getW(),w=l.find(x=>x.addr===a.dataset.label);if(!w)return;const v=prompt("Label für diese Wallet (leer = keins):",w.label||"");if(v===null)return;w.label=v.trim().slice(0,40);setW(l)},true);
+/* neue Tx seit Cursor holen (neueste zuerst) */
+async function recentIds(a,c){if(c==="SOL")return(await sol("getSignaturesForAddress",[a,{limit:15}],false)).filter(x=>!x.err).map(x=>({id:x.signature,time:x.blockTime}));
+if(c==="ETH")return((await jget(`https://eth.blockscout.com/api/v2/addresses/${a}/transactions`)).items||[]).slice(0,15).map(t=>({id:t.hash,time:t.timestamp?Date.parse(t.timestamp)/1000:null,eth:t}));
+return(await jget(`https://mempool.space/api/address/${a}/txs`)).slice(0,15).map(t=>({id:t.txid,time:t.status.block_time||Date.now()/1000,btc:t}))}
+async function txDetail(w,x){try{if(w.chain==="SOL"){const t=await getTx(x.id);if(!t)return{};const k=keysOf(t),i=k.indexOf(w.addr),m=t.meta;let parts=[],dir="";
+if(i>=0){const d=(m.postBalances[i]-m.preBalances[i]+(i===0?m.fee:0))/1e9;if(Math.abs(d)>=0.000001){parts.push((d>0?"+":"")+fmt(d)+" SOL");dir=d>0?"in":"out"}}
+const tok={};(m.preTokenBalances||[]).forEach(b=>{if(b.owner===w.addr)tok[b.mint]=(tok[b.mint]||0)-(+b.uiTokenAmount.uiAmountString||0)});(m.postTokenBalances||[]).forEach(b=>{if(b.owner===w.addr)tok[b.mint]=(tok[b.mint]||0)+(+b.uiTokenAmount.uiAmountString||0)});
+const mints=Object.keys(tok).filter(k=>Math.abs(tok[k])>1e-9);let names={};if(mints.length){const px=await dex(mints);mints.forEach(k=>names[k]=px[k]?.[0]?.baseToken.symbol||sh(k))}
+mints.forEach(k=>{parts.push((tok[k]>0?"+":"")+num(tok[k])+" "+names[k]);if(!dir)dir=tok[k]>0?"in":"out"});return{dir,amt:parts.join(", "),time:t.blockTime}}
+if(w.chain==="ETH"){const t=x.eth;const out=t.from?.hash?.toLowerCase()===w.addr.toLowerCase();return{dir:out?"out":"in",amt:num(Number(t.value)/1e18)+" ETH",time:x.time}}
+const t=x.btc;const inn=t.vout.filter(o=>o.scriptpubkey_address===w.addr).reduce((a,o)=>a+o.value,0),outv=t.vin.filter(v=>v.prevout?.scriptpubkey_address===w.addr).reduce((a,v)=>a+v.prevout.value,0);const d=(inn-outv)/1e8;return{dir:d>=0?"in":"out",amt:(d>0?"+":"")+d+" BTC",time:x.time}}catch(e){return{}}}
+/* ---------- Telegram ---------- */
+const TG=()=>{try{return JSON.parse(localStorage.getItem("otc_tg"))||{}}catch(e){return{}}};const setTG=o=>localStorage.setItem("otc_tg",JSON.stringify(o));
+const SENT=()=>{try{return JSON.parse(localStorage.getItem("otc_tg_sent"))||[]}catch(e){return[]}};const addSent=ids=>{const s=[...SENT(),...ids].slice(-800);localStorage.setItem("otc_tg_sent",JSON.stringify(s))};
+async function tgCall(token,method,body){const r=await fetch(`https://api.telegram.org/bot${encodeURIComponent(token).replace(/%3A/i,":")}/${method}`,{method:"POST",body:new URLSearchParams(Object.entries(body||{}).map(([k,v])=>[k,String(v)]))});/* form-encoded = kein CORS-Preflight (Telegram beantwortet OPTIONS nicht) */let j;try{j=await r.json()}catch(e){j={ok:false,description:"HTTP "+r.status}}if(!j.ok)throw new Error((j.error_code?j.error_code+" ":"")+(j.description||"Fehler")+(j.error_code===401?" – Bot-Token ungültig":""));return j.result}
+const appUrl=q=>location.origin+location.pathname+"?"+q;
+function tgText(w,x,d){const ch={SOL:"Solana",ETH:"Ethereum",BTC:"Bitcoin"}[w.chain];const dir=d.dir==="in"?"⬇️ Eingang":d.dir==="out"?"⬆️ Ausgang":"🔄 Transaktion";
+return `🔔 <b>${esc(w.label||sh(w.addr))}</b> (${ch})\n${dir}${d.amt?": <b>"+esc(d.amt)+"</b>":""}\n🕒 ${esc(tme(d.time||x.time))}\n<a href="${XURL[w.chain].tx(x.id)}">Explorer</a> · <a href="${appUrl("tx="+encodeURIComponent(x.id))}">Im Tool ansehen</a> · <a href="${appUrl("wallet="+encodeURIComponent(w.addr))}">Wallet</a>`}
+async function tgNotify(items){const c=TG();if(!c.on||!c.token||!c.chat||!items.length)return;const sent=new Set(SENT());items=items.filter(i=>!sent.has(i.x.id));if(!items.length)return;
+try{if(items.length>5){for(const i of items.slice(0,3))await tgCall(c.token,"sendMessage",{chat_id:c.chat,text:tgText(i.w,i.x,i.d),parse_mode:"HTML",disable_web_page_preview:true});
+const by={};items.slice(3).forEach(i=>{const k=i.w.label||sh(i.w.addr);by[k]=(by[k]||0)+1});await tgCall(c.token,"sendMessage",{chat_id:c.chat,parse_mode:"HTML",text:`📦 <b>+${items.length-3} weitere neue Transaktionen</b>\n`+Object.entries(by).map(([k,n])=>`• ${esc(k)}: ${n}`).join("\n")+`\n<a href="${appUrl("tab=wallet")}">Watchlist öffnen</a>`})}
+else for(const i of items)await tgCall(c.token,"sendMessage",{chat_id:c.chat,text:tgText(i.w,i.x,i.d),parse_mode:"HTML",disable_web_page_preview:true});
+addSent(items.map(i=>i.x.id));tgStatus("Letzter Alert gesendet: "+new Date().toLocaleTimeString("de-DE"))}catch(e){tgStatus("❌ Telegram-Fehler: "+e.message,1)}}
+function tgStatus(t,err){const m=$("#tgMsg");if(m){m.textContent=t;m.className=err?"err":"ok"}}
+let checking=false;
+async function checkWatch(){if(checking)return;checking=true;const l=getW(),alerts=[];
+for(const w of l){try{const ids=await recentIds(w.addr,w.chain);if(ids.length){const k=w.last?ids.findIndex(x=>x.id===w.last):-1;const fresh=w.last?(k<0?ids:ids.slice(0,k)):[];
+for(const x of fresh.slice(0,10))alerts.push({w,x,d:await txDetail(w,x)});w.last=ids[0].id;if(!w.seen&&!fresh.length)w.seen=w.last}w.checked=Date.now()}catch(e){}await sleep(400)}
+setW(l);checking=false;await tgNotify(alerts.reverse())}
 /* ---------- Kauf-Analyse ---------- */
 async function boughtFlow(mint,buySig,out){out.innerHTML="";const top=document.createElement("div");out.appendChild(top);const tok=document.createElement("div");out.appendChild(tok);
 const pr=progress(top);try{let after=[],me=null,from=[];
@@ -197,3 +226,13 @@ try{const r=await fetch("https://mainnet.helius-rpc.com/?api-key="+encodeURIComp
 localStorage.setItem("helius_key",k);rcache.clear();$("#keyIn").value="";m.className="ok";m.textContent="✅ Key gültig und gespeichert (Slot "+j.result.toLocaleString("de-DE")+").";renderKeyState()}catch(e){m.className="err";m.textContent="❌ Key konnte nicht verifiziert werden: "+e.message}};
 $("#keyDel").onclick=()=>{localStorage.removeItem("helius_key");rcache.clear();$("#keyMsg").className="";$("#keyMsg").textContent="Key gelöscht.";renderKeyState()};
 renderKeyState();
+
+/* Telegram-Einstellungen UI */
+function renderTG(){const c=TG();$("#tgOn").checked=!!c.on;$("#tgChat").value=c.chat||"";$("#tgState").textContent=c.token?"Bot-Token gespeichert ("+c.token.split(":")[0]+":…) · Alerts "+(c.on?"AN":"AUS"):"Kein Bot-Token gespeichert."}
+const tgTok=()=>$("#tgToken").value.trim()||TG().token||"";
+$("#tgFind").onclick=async()=>{const t=tgTok();if(!t)return tgStatus("Bitte zuerst Bot-Token eingeben.",1);tgStatus("Suche Chat-ID …");try{const u=await tgCall(t,"getUpdates",{limit:50});const m=u.map(x=>x.message||x.edited_message).filter(m=>m&&m.chat&&m.chat.type==="private").pop();if(!m)return tgStatus("Keine private Nachricht gefunden – schreibe deinem Bot zuerst „Hallo“ und versuche es erneut.",1);$("#tgChat").value=m.chat.id;tgStatus("✅ Chat-ID gefunden: "+m.chat.id+(m.chat.first_name?" ("+m.chat.first_name+")":""))}catch(e){tgStatus("❌ "+e.message,1)}};
+$("#tgTest").onclick=async()=>{const t=tgTok(),c=$("#tgChat").value.trim();if(!t||!c)return tgStatus("Bot-Token und Chat-ID benötigt.",1);try{await tgCall(t,"sendMessage",{chat_id:c,parse_mode:"HTML",text:"✅ <b>OTC TX Tracker</b>\nTestnachricht – Telegram-Alerts funktionieren."});tgStatus("✅ Testnachricht gesendet.")}catch(e){tgStatus("❌ "+e.message,1)}};
+$("#tgSave").onclick=async()=>{const t=tgTok(),c=$("#tgChat").value.trim();if(!/^\d{5,}:[A-Za-z0-9_-]{20,}$/.test(t))return tgStatus("Ungültiges Bot-Token-Format (z. B. 123456:ABC…).",1);if(!/^-?\d{3,}$/.test(c))return tgStatus("Ungültige Chat-ID.",1);try{const me=await tgCall(t,"getMe");setTG({token:t,chat:c,on:$("#tgOn").checked});$("#tgToken").value="";tgStatus("✅ Gespeichert – Bot @"+me.username);renderTG()}catch(e){tgStatus("❌ "+e.message,1)}};
+$("#tgDel").onclick=()=>{localStorage.removeItem("otc_tg");$("#tgToken").value="";tgStatus("Telegram-Daten gelöscht.");renderTG()};
+$("#tgOn").onchange=()=>{const c=TG();if(!c.token){tgStatus("Erst Bot-Token & Chat-ID speichern.",1);$("#tgOn").checked=false;return}c.on=$("#tgOn").checked;setTG(c);renderTG()};
+renderTG();
