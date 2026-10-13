@@ -19,6 +19,23 @@ const outs=tx.vout.filter(o=>o.scriptpubkey_address);const cand=outs.filter(o=>!
 const tot=tx.vout.reduce((s,o)=>s+o.value,0);const sender=tx.vin[0].is_coinbase?"Coinbase (neu geschürft)":(tx.vin[0].prevout?.scriptpubkey_address||"–");
 return{chain:"BTC",hash:h,amount:(best?best.value/1e8:tot/1e8)+" BTC",total:tot/1e8+" BTC",fee:(tx.fee||0)/1e8+" BTC",status:tx.status.confirmed?"Bestätigt":"Ausstehend (Mempool)",conf,time:tx.status.block_time?new Date(tx.status.block_time*1000):null,
 from:sender,to:best&&best.scriptpubkey_address,txUrl:"https://mempool.space/tx/"+h,addr:a=>"https://mempool.space/address/"+a}}
+const SOL_RPCS=["https://solana-rpc.publicnode.com","https://api.mainnet-beta.solana.com"];
+async function srpc(method,params){let last;for(const u of SOL_RPCS){try{const r=await fetch(u,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({jsonrpc:"2.0",id:1,method,params})});const j=await r.json();if(j.error)throw new Error(j.error.message);return j.result}catch(e){last=e}}throw last||new Error("Solana-RPC nicht erreichbar")}
+const fmt=n=>(+n.toFixed(9)).toLocaleString("en-US",{maximumFractionDigits:9}).replace(/,/g,"");
+async function fetchSol(sig){const [tx,ss]=await Promise.all([srpc("getTransaction",[sig,{maxSupportedTransactionVersion:0,encoding:"jsonParsed",commitment:"confirmed"}]),srpc("getSignatureStatuses",[[sig],{searchTransactionHistory:true}]).catch(()=>null)]);
+if(!tx)throw new Error("Transaktion nicht gefunden (Solana Mainnet).");const m=tx.meta||{},msg=tx.transaction.message;
+const keys=msg.accountKeys.map(k=>typeof k==="string"?k:k.pubkey);const payer=keys[0];
+const ins=[...msg.instructions,...(m.innerInstructions||[]).flatMap(i=>i.instructions)];
+const tr=ins.filter(i=>i.program==="system"&&i.parsed&&/^transfer/.test(i.parsed.type));
+let amount,from=payer,to=null,kind="";
+const st=ss&&ss.value&&ss.value[0];const fin=st&&st.confirmationStatus==="finalized";
+if(tr.length){const f=tr[0].parsed.info;from=f.source||f.from||payer;to=f.destination||f.to;const lam=tr.filter(i=>(i.parsed.info.destination)===to).reduce((a,i)=>a+i.parsed.info.lamports,0);amount=fmt(lam/1e9)+" SOL"}
+else{const pre={},post={};(m.preTokenBalances||[]).forEach(b=>pre[b.accountIndex]=b);(m.postTokenBalances||[]).forEach(b=>post[b.accountIndex]=b);
+const d=Object.keys({...pre,...post}).map(i=>{const a=post[i]||pre[i];const v=(+(post[i]?.uiTokenAmount.uiAmountString||0))-(+(pre[i]?.uiTokenAmount.uiAmountString||0));return{v,owner:a.owner,mint:a.mint}}).filter(x=>x.v);
+if(d.length){d.sort((a,b)=>b.v-a.v);const rx=d[0],sx=d[d.length-1];to=rx.owner;if(sx.v<0)from=sx.owner;amount=fmt(rx.v)+" Token ("+rx.mint.slice(0,4)+"…"+rx.mint.slice(-4)+")";kind="SPL-Token-Transfer"}
+else{amount="0 SOL";kind="kein Transfer erkannt"}}
+return{chain:"SOL",hash:sig,amount,fee:fmt((m.fee||0)/1e9)+" SOL",status:m.err?"Fehlgeschlagen":"Bestätigt",conf:st?(st.confirmations??0):0,confText:fin?"finalized":st?(st.confirmations??0)+" Bestätigungen ("+st.confirmationStatus+")":"",
+time:tx.blockTime?new Date(tx.blockTime*1000):null,from,to,txUrl:"https://solscan.io/tx/"+sig,addr:a=>"https://solscan.io/account/"+a,note:kind?"("+kind+")":""}}
 let skip=false;
 function play(d){if(new URLSearchParams(location.search).has("noanim")){document.body.classList.add("noanim");return Promise.resolve()}return new Promise(res=>{const st=$("#stage");st.hidden=false;const c=$("#anim");c.width=1280;c.height=720;const x=c.getContext("2d");skip=false;
 const W=1280,H=720,cx=640,cy=380,R=230,D=9500,t0=performance.now();const stars=Array.from({length:300},()=>[Math.random()*W,Math.random()*H,Math.random()*1.6]);
@@ -52,18 +69,18 @@ if(t>=.86){const k=Math.min(1,(t-.86)/.06);glowText(d.status==="Bestätigt"?"CON
 if(t<1)requestAnimationFrame(frame);else setTimeout(()=>{st.hidden=true;res()},300)}
 requestAnimationFrame(frame)})}
 $("#skip").onclick=()=>skip=true;
-function card(d){const a=v=>v&&/^(0x[0-9a-fA-F]{40}$|[13]|bc1|0[234]|04)/.test(v)&&!v.includes(" ")?`<a href="${d.addr(v)}" target="_blank" rel="noopener">${v}</a>`:`<span class="v">${v||"–"}</span>`;
+function card(d){const a=v=>v&&(d.chain==="SOL"?/^[1-9A-HJ-NP-Za-km-z]{32,44}$/:/^(0x[0-9a-fA-F]{40}$|[13]|bc1|0[234]|04)/).test(v)&&!v.includes(" ")?`<a href="${d.addr(v)}" target="_blank" rel="noopener">${v}</a>`:`<span class="v">${v||"–"}</span>`;
 const c=$("#card");c.hidden=false;c.innerHTML=`<h2>TRANSAKTION ${d.status==="Bestätigt"?"BESTÄTIGT":d.status.toUpperCase()}</h2><div class="grid">
-<div class="k">Netzwerk</div><div class="v">${d.chain==="ETH"?"Ethereum Mainnet":"Bitcoin"}</div>
+<div class="k">Netzwerk</div><div class="v">${({ETH:"Ethereum Mainnet",BTC:"Bitcoin",SOL:"Solana Mainnet"})[d.chain]}</div>
 <div class="k">Tx-Hash</div><div><a href="${d.txUrl}" target="_blank" rel="noopener">${d.hash}</a></div>
-<div class="k">Status</div><div class="v">${d.status} · ${d.conf.toLocaleString("de-DE")} Bestätigungen</div>
+<div class="k">Status</div><div class="v">${d.status} · ${d.confText||d.conf.toLocaleString("de-DE")+" Bestätigungen"}</div>
 <div class="k">Betrag</div><div class="v">${d.amount}${d.total?` (gesamt ${d.total})`:""}</div>
 <div class="k">Gebühr</div><div class="v">${d.fee}</div>
 <div class="k">Zeit</div><div class="v">${d.time?d.time.toLocaleString("de-DE"):"noch nicht im Block"}</div>
 <div class="k">Absender</div><div>${a(d.from)}</div></div>
 <div class="buyer"><div class="k">Käufer-Wallet (Empfänger) ${d.note||""}</div><div style="margin-top:6px;font-size:18px">${a(d.to)}</div></div>`}
 $("#f").onsubmit=async e=>{e.preventDefault();let h=$("#h").value.trim();$("#card").hidden=true;let fn;
-if(/^0x[0-9a-fA-F]{64}$/.test(h)){fn=fetchEth;h=h.toLowerCase()}else if(/^[0-9a-fA-F]{64}$/.test(h)){fn=fetchBtc;h=h.toLowerCase()}else return msg("Ungültiger Hash: Ethereum = 0x + 64 Hex-Zeichen, Bitcoin = 64 Hex-Zeichen.",1);
+if(/^0x[0-9a-fA-F]{64}$/.test(h)){fn=fetchEth;h=h.toLowerCase()}else if(/^[0-9a-fA-F]{64}$/.test(h)){fn=fetchBtc;h=h.toLowerCase()}else if(/^[1-9A-HJ-NP-Za-km-z]{80,90}$/.test(h)){fn=fetchSol}else return msg("Ungültiger Hash: Ethereum = 0x + 64 Hex-Zeichen, Bitcoin = 64 Hex-Zeichen, Solana = Base58-Signatur (87–88 Zeichen).",1);
 msg("Lade Transaktion …");try{const d=await fn(h);msg("");await play(d);card(d)}catch(err){msg("Fehler: "+err.message,1)}};
 $("#wallet").onclick=async()=>{if(!window.ethereum)return msg("Keine Browser-Wallet (z. B. MetaMask) gefunden – für die Suche nicht nötig.",1);try{const [acc]=await ethereum.request({method:"eth_requestAccounts"});$("#wallet").textContent=short(acc)}catch(e){msg("Verbindung abgelehnt.",1)}};
 const p=new URLSearchParams(location.search);const pre=p.get("tx");if(pre){$("#h").value=pre;$("#f").requestSubmit()}
