@@ -16,7 +16,7 @@
 <p class="hinweis">⚠️ Hinweis: Alerts laufen nur, solange diese Seite in einem Browser-Tab geöffnet ist (Prüfung jede Minute + direkt beim Laden). <b>Seite offen lassen</b>. Bot-Token &amp; Chat-ID werden nur lokal in deinem Browser gespeichert.</p>
 <button id="setClose" class="btn small">Schließen</button></div>
 <p id="keyHint" class="keyhint" hidden>Öffentliches RPC war limitiert – für bessere Ergebnisse <a href="#" onclick="document.getElementById('settings').hidden=false;return false">Helius-Key eintragen</a>.</p>
-<nav class="tabs"><button data-tab="tx" class="on">Transaktion</button><button data-tab="token">Token-Analyse</button><button data-tab="wallet">Wallet</button><button data-tab="bought">Ich habe gekauft</button></nav>
+<nav class="tabs"><button data-tab="tx" class="on">Transaktion</button><button data-tab="token">Token-Analyse</button><button data-tab="wallet">Wallet</button><button data-tab="bought">Ich habe gekauft</button><button data-tab="network">Bundle-Netzwerk</button></nav>
 <main>
 <section id="tab-tx" class="tab">
 <form id="f" class="panel"><label for="h" class="glow-s">Transaktion oder Adresse eingeben (Bitcoin, Ethereum oder Solana)</label>
@@ -40,4 +40,14 @@
 <div class="col"><input id="buyTok" placeholder="Token-Mint-Adresse" autocomplete="off" spellcheck="false"><input id="buyTx" placeholder="Optional: Signatur deines Kaufs" autocomplete="off" spellcheck="false"><button class="btn" type="submit">Wer hat verkauft?</button></div>
 <p class="muted">Zeigt, wer dir verkauft hat, wer danach abgestoßen hat, plus die komplette Token-Analyse.</p></form>
 <div id="buyOut"></div></section>
-</main><script src="app.js"></script><script src="research.js"></script></body></html>
+<section id="tab-network" class="tab" hidden>
+<div class="panel"><label class="glow-s">Bundle-Netzwerk (Solana)</label>
+<div class="row"><select id="netSel"></select><button class="btn small" id="netNew">Neu</button><button class="btn small" id="netDel">Löschen</button></div>
+<div class="row" style="margin-top:10px"><input id="netAddIn" placeholder="Wallet manuell hinzufügen (Solana)" spellcheck="false"><button class="btn small" id="netAdd">Hinzufügen</button></div>
+<div class="row" style="margin-top:10px"><button class="btn" id="netExp">🔎 Netzwerk erweitern (1-Hop + Token-Historie)</button><button class="btn" id="monBtn">▶ Überwachung starten</button></div>
+<p id="monState" class="muted"></p>
+<p class="hinweis">⚠️ Hinweis: Die Überwachung läuft nur, solange diese Seite in einem Browser-Tab geöffnet ist – <b>Seite offen lassen</b>. Ohne Helius-Key werden max. 8 Wallets alle 90 s geprüft (mit Key 30 Wallets alle 30 s). Alerts gehen an die Telegram-Einstellungen unter ⚙. Alle Zuordnungen sind Indizien, kein Beweis.</p></div>
+<div id="netBody"></div>
+<div class="panel sub"><h3 class="glow-s">Funde / Benachrichtigungen</h3><div id="netNotes"></div></div>
+</section>
+</main><script src="app.js"></script><script src="research.js"></script><script src="network.js"></script></body></html>
