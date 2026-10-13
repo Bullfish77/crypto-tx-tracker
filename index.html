@@ -1,11 +1,29 @@
 <!DOCTYPE html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>OTC Transaktions-Tracker</title><link rel="stylesheet" href="style.css"></head><body>
+<title>OTC TX Tracker</title><link rel="stylesheet" href="style.css"></head><body>
 <canvas id="bg"></canvas>
 <header><h1 class="glow">OTC TX TRACKER</h1><button id="wallet" class="btn small">Wallet verbinden</button></header>
+<nav class="tabs"><button data-tab="tx" class="on">Transaktion</button><button data-tab="token">Token-Analyse</button><button data-tab="wallet">Wallet</button><button data-tab="bought">Ich habe gekauft</button></nav>
 <main>
-<form id="f" class="panel"><label for="h" class="glow-s">Transaktions-Hash eingeben (Bitcoin, Ethereum oder Solana)</label>
-<div class="row"><input id="h" placeholder="0x… (ETH), 64-stelliger Hex-Hash (BTC) oder Base58-Signatur (SOL)" autocomplete="off" spellcheck="false"><button class="btn" type="submit">Verfolgen</button></div>
+<section id="tab-tx" class="tab">
+<form id="f" class="panel"><label for="h" class="glow-s">Transaktion oder Adresse eingeben (Bitcoin, Ethereum oder Solana)</label>
+<div class="row"><input id="h" placeholder="Tx-Hash / Signatur – oder Token-/Wallet-Adresse (wird automatisch erkannt)" autocomplete="off" spellcheck="false"><button class="btn" type="submit">Verfolgen</button></div>
 <div id="msg"></div></form>
 <div id="stage" hidden><canvas id="anim"></canvas><button id="skip" class="btn small">Überspringen ⏭</button></div>
 <section id="card" class="panel card" hidden></section>
-</main><script src="app.js"></script></body></html>
+</section>
+<section id="tab-token" class="tab" hidden>
+<form id="tokF" class="panel"><label for="tokIn" class="glow-s">Token-Adresse (Solana-Mint, optional Ethereum-Contract)</label>
+<div class="row"><input id="tokIn" placeholder="z. B. …pump (Solana-Mint) oder 0x… (ERC-20)" autocomplete="off" spellcheck="false"><button class="btn" type="submit">Analysieren</button></div>
+<p class="muted">Prüft Creator, Mint-/Freeze-Authority, Top-Holder, Bundles (gleicher Slot), Funding-Cluster und Rug-Signale. Öffentliche RPCs sind limitiert – die Analyse dauert ca. 30–90 s.</p></form>
+<div id="tokOut"></div></section>
+<section id="tab-wallet" class="tab" hidden>
+<form id="walF" class="panel"><label for="walIn" class="glow-s">Wallet-Adresse (Solana, Ethereum oder Bitcoin)</label>
+<div class="row"><input id="walIn" placeholder="Solana-Base58, 0x… oder bc1…/1…/3…" autocomplete="off" spellcheck="false"><button class="btn" type="submit">Ansehen</button></div></form>
+<div class="panel sub"><h3 class="glow-s">Beobachtete Wallets</h3><div id="watchlist"></div><p class="muted">Gespeichert lokal in deinem Browser; wird jede Minute geprüft, solange die Seite offen ist.</p></div>
+<div id="walOut"></div></section>
+<section id="tab-bought" class="tab" hidden>
+<form id="buyF" class="panel"><label class="glow-s">Ich habe diesen Coin gekauft (Solana)</label>
+<div class="col"><input id="buyTok" placeholder="Token-Mint-Adresse" autocomplete="off" spellcheck="false"><input id="buyTx" placeholder="Optional: Signatur deines Kaufs" autocomplete="off" spellcheck="false"><button class="btn" type="submit">Wer hat verkauft?</button></div>
+<p class="muted">Zeigt, wer dir verkauft hat, wer danach abgestoßen hat, plus die komplette Token-Analyse.</p></form>
+<div id="buyOut"></div></section>
+</main><script src="app.js"></script><script src="research.js"></script></body></html>

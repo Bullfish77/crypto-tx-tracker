@@ -22,7 +22,7 @@ from:sender,to:best&&best.scriptpubkey_address,txUrl:"https://mempool.space/tx/"
 const SOL_RPCS=["https://solana-rpc.publicnode.com","https://api.mainnet-beta.solana.com"];
 async function srpc(method,params){let last;for(const u of SOL_RPCS){try{const r=await fetch(u,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({jsonrpc:"2.0",id:1,method,params})});const j=await r.json();if(j.error)throw new Error(j.error.message);return j.result}catch(e){last=e}}throw last||new Error("Solana-RPC nicht erreichbar")}
 const fmt=n=>(+n.toFixed(9)).toLocaleString("en-US",{maximumFractionDigits:9}).replace(/,/g,"");
-async function fetchSol(sig){const [tx,ss]=await Promise.all([srpc("getTransaction",[sig,{maxSupportedTransactionVersion:0,encoding:"jsonParsed",commitment:"confirmed"}]),srpc("getSignatureStatuses",[[sig],{searchTransactionHistory:true}]).catch(()=>null)]);
+async function fetchSol(sig){const [tx,ss]=await Promise.all([srpc("getTransaction",[sig,{maxSupportedTransactionVersion:1,encoding:"jsonParsed",commitment:"confirmed"}]),srpc("getSignatureStatuses",[[sig],{searchTransactionHistory:true}]).catch(()=>null)]);
 if(!tx)throw new Error("Transaktion nicht gefunden (Solana Mainnet).");const m=tx.meta||{},msg=tx.transaction.message;
 const keys=msg.accountKeys.map(k=>typeof k==="string"?k:k.pubkey);const payer=keys[0];
 const ins=[...msg.instructions,...(m.innerInstructions||[]).flatMap(i=>i.instructions)];
@@ -80,7 +80,7 @@ const c=$("#card");c.hidden=false;c.innerHTML=`<h2>TRANSAKTION ${d.status==="Bes
 <div class="k">Absender</div><div>${a(d.from)}</div></div>
 <div class="buyer"><div class="k">Käufer-Wallet (Empfänger) ${d.note||""}</div><div style="margin-top:6px;font-size:18px">${a(d.to)}</div></div>`}
 $("#f").onsubmit=async e=>{e.preventDefault();let h=$("#h").value.trim();$("#card").hidden=true;let fn;
-if(/^0x[0-9a-fA-F]{64}$/.test(h)){fn=fetchEth;h=h.toLowerCase()}else if(/^[0-9a-fA-F]{64}$/.test(h)){fn=fetchBtc;h=h.toLowerCase()}else if(/^[1-9A-HJ-NP-Za-km-z]{80,90}$/.test(h)){fn=fetchSol}else return msg("Ungültiger Hash: Ethereum = 0x + 64 Hex-Zeichen, Bitcoin = 64 Hex-Zeichen, Solana = Base58-Signatur (87–88 Zeichen).",1);
+if(/^0x[0-9a-fA-F]{64}$/.test(h)){fn=fetchEth;h=h.toLowerCase()}else if(/^[0-9a-fA-F]{64}$/.test(h)){fn=fetchBtc;h=h.toLowerCase()}else if(/^[1-9A-HJ-NP-Za-km-z]{80,90}$/.test(h)){fn=fetchSol}else if(await routeAddress(h)){msg("");return}else return msg("Ungültiger Hash: Ethereum = 0x + 64 Hex-Zeichen, Bitcoin = 64 Hex-Zeichen, Solana = Base58-Signatur (87–88 Zeichen).",1);
 msg("Lade Transaktion …");try{const d=await fn(h);msg("");await play(d);card(d)}catch(err){msg("Fehler: "+err.message,1)}};
 $("#wallet").onclick=async()=>{if(!window.ethereum)return msg("Keine Browser-Wallet (z. B. MetaMask) gefunden – für die Suche nicht nötig.",1);try{const [acc]=await ethereum.request({method:"eth_requestAccounts"});$("#wallet").textContent=short(acc)}catch(e){msg("Verbindung abgelehnt.",1)}};
-const p=new URLSearchParams(location.search);const pre=p.get("tx");if(pre){$("#h").value=pre;$("#f").requestSubmit()}
+
