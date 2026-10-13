@@ -1,0 +1,11 @@
+<!DOCTYPE html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>OTC Transaktions-Tracker</title><link rel="stylesheet" href="style.css"></head><body>
+<canvas id="bg"></canvas>
+<header><h1 class="glow">OTC TX TRACKER</h1><button id="wallet" class="btn small">Wallet verbinden</button></header>
+<main>
+<form id="f" class="panel"><label for="h" class="glow-s">Transaktions-Hash eingeben (Bitcoin oder Ethereum)</label>
+<div class="row"><input id="h" placeholder="0x… oder 64-stelliger Hex-Hash" autocomplete="off" spellcheck="false"><button class="btn" type="submit">Verfolgen</button></div>
+<div id="msg"></div></form>
+<div id="stage" hidden><canvas id="anim"></canvas><button id="skip" class="btn small">Überspringen ⏭</button></div>
+<section id="card" class="panel card" hidden></section>
+</main><script src="app.js"></script></body></html>

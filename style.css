@@ -1,0 +1,20 @@
+*{box-sizing:border-box}body{margin:0;background:#02040c;color:#bfe3ff;font-family:"Segoe UI",Roboto,Arial,sans-serif;min-height:100vh}
+#bg{position:fixed;inset:0;z-index:-1}
+header{display:flex;justify-content:space-between;align-items:center;padding:18px 28px}
+.glow,.glow-s,.card h2,.v{color:#dff4ff;background:linear-gradient(180deg,#fff 0%,#9fdcff 40%,#2f9bff 60%,#bfe9ff 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;filter:drop-shadow(0 0 6px #1e90ff) drop-shadow(0 0 14px #0066ff)}
+h1{margin:0;font-size:28px;letter-spacing:4px}
+main{max-width:900px;margin:0 auto;padding:10px 20px 40px}
+.panel{background:rgba(5,20,50,.55);border:1px solid #2a7fff;border-radius:14px;padding:20px;box-shadow:0 0 18px rgba(30,144,255,.35),inset 0 0 20px rgba(30,144,255,.12);margin-bottom:20px}
+label{display:block;font-weight:600;margin-bottom:10px}
+.row{display:flex;gap:10px}input{flex:1;background:#020a1c;border:1px solid #3a8cff;color:#cfeaff;padding:12px;border-radius:8px;font-family:monospace;font-size:14px;outline:none}
+input:focus{box-shadow:0 0 12px #1e90ff}
+.btn{background:linear-gradient(180deg,#3aa8ff,#0b4fd1);color:#fff;border:1px solid #8fd0ff;border-radius:8px;padding:12px 18px;font-weight:700;cursor:pointer;text-shadow:0 0 6px #9fdcff;box-shadow:0 0 12px #1e90ff}
+.btn:hover{box-shadow:0 0 22px #4db2ff}.small{padding:7px 12px;font-size:13px}
+#msg{margin-top:10px;min-height:1.2em;color:#9fd0ff}#msg.err{color:#ff7a9a;text-shadow:0 0 6px #ff2d6a}
+#stage{position:relative;margin-bottom:20px}#anim{width:100%;aspect-ratio:16/9;border-radius:14px;border:1px solid #2a7fff;box-shadow:0 0 22px rgba(30,144,255,.4);display:block;background:#000}
+#skip{position:absolute;right:12px;bottom:12px}
+.card h2{margin:0 0 14px;letter-spacing:3px}.grid{display:grid;grid-template-columns:170px 1fr;gap:10px 14px}
+.k{color:#6fb6ff;font-size:13px;text-transform:uppercase;letter-spacing:1px}.v{font-family:monospace;word-break:break-all;font-weight:600}
+.card a{color:#9fe0ff;text-shadow:0 0 8px #1e90ff;text-decoration:none;font-family:monospace;word-break:break-all;font-weight:700}.card a:hover{text-decoration:underline}
+.buyer{margin-top:16px;padding:14px;border:1px solid #57b8ff;border-radius:10px;box-shadow:0 0 16px #1e90ff inset}
+.card{animation:in .6s ease}.noanim .card{animation:none}@keyframes in{from{opacity:0;transform:translateY(12px)}}
